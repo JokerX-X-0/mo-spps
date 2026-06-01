@@ -71,6 +71,21 @@ class SharedPool:
             for j in self.capacities
         }
 
+    def compute_pressure_factors(
+        self, population: list[Agent]
+    ) -> dict[int, float]:
+        """Compute continuous soft-pressure factors.
+
+        φ_j = 1 / (1 + u_j / Q_j)
+
+        Smooth decay without hard clipping at Q_j.
+        """
+        occupancy = self.compute_occupancy(population)
+        return {
+            j: 1.0 / (1.0 + occupancy[j] / max(self.capacities[j], 1))
+            for j in self.capacities
+        }
+
     def sample(
         self,
         preference: np.ndarray,
@@ -78,28 +93,19 @@ class SharedPool:
         size: int,
         rng: np.random.Generator,
     ) -> list[int]:
-        """Sample components without replacement using soft-pressure probabilities.
+        """Sample components without replacement.
 
-        Full formula (Section 8.2):
+        Mode "soft_pressure": clipped formula (epsilon + max(Q_j-u_j,0)/Q_j)^tau
+        Mode "continuous": smooth formula (epsilon + 1/(1+u_j/Q_j))^tau
+        Both include utility boost (1 + kappa * U_j) when kappa > 0.
 
-            p_j ∝ (epsilon + q_tilde_j / Q_j)^tau * rho_j * pi_{i,j} * (1 + kappa * U_j)
-
-        When kappa=0, reduces to the simplified form (Section 8.3).
-
-        Sampling is done without replacement. After each draw, the selected
-        component's probability is set to 0 for the next draw.
-
-        Args:
-            preference: Agent's component preference vector pi_i, shape (M,).
-            population: Current active population for occupancy stats.
-            size: Number of components to sample (shop_size).
-            rng: Random number generator.
-
-        Returns:
-            List of sampled component indices.
+        Sampling without replacement — selected components are excluded from
+        subsequent draws.
         """
         if self.mode == "soft_pressure":
             return self._sample_soft_pressure(preference, population, size, rng)
+        elif self.mode == "continuous":
+            return self._sample_continuous(preference, population, size, rng)
         elif self.mode == "hard_cap":
             return self._sample_hard_cap(preference, size, rng)
         elif self.mode == "none":
@@ -179,6 +185,58 @@ class SharedPool:
             total = probs.sum()
             if total <= 0:
                 # Fallback: uniform over unselected components
+                candidates = [
+                    c for c in components if c not in result
+                ]
+                if not candidates:
+                    break
+                chosen = int(rng.choice(candidates))
+            else:
+                probs /= total
+                chosen_idx = int(rng.choice(M, p=probs))
+                chosen = components[chosen_idx]
+
+            result.append(chosen)
+
+        return result
+
+    def _sample_continuous(
+        self,
+        preference: np.ndarray,
+        population: list[Agent],
+        size: int,
+        rng: np.random.Generator,
+    ) -> list[int]:
+        """Continuous soft-pressure sampling.
+
+        φ_j = (ε + 1/(1 + u_j/Q_j))^τ
+        p_j ∝ φ_j · ρ_j · π_{i,j} · (1 + κ · U_j)
+
+        No hard clipping — pressure decays smoothly as usage increases.
+        """
+        phi = self.compute_pressure_factors(population)
+        M = self.num_components
+        components = list(self.capacities.keys())
+
+        result: list[int] = []
+        probs = np.zeros(M)
+
+        for _ in range(size):
+            for idx, j in enumerate(components):
+                if j in result:
+                    probs[idx] = 0.0
+                    continue
+                rho_j = self.base_weights.get(j, 1.0)
+                pi_ij = preference[idx]
+                U_j = self._component_utilities.get(j, 0.0)
+                utility_boost = 1.0 + self.kappa * U_j
+                probs[idx] = (
+                    (self.epsilon + phi[j]) ** self.tau
+                    * rho_j * pi_ij * utility_boost
+                )
+
+            total = probs.sum()
+            if total <= 0:
                 candidates = [
                     c for c in components if c not in result
                 ]
