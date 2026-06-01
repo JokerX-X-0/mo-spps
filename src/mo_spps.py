@@ -416,7 +416,7 @@ class MOSPPSOptimizer:
 
         # Generate candidates
         candidates = operators.generate_all_candidates(
-            agent.solution, shop, self.solution_capacity
+            agent.solution, shop, self.solution_capacity, self.rng
         )
 
         if not candidates:

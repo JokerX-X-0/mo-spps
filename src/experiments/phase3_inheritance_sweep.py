@@ -1,11 +1,6 @@
-"""Phase 3 ablation experiments: strategy preference inheritance validation.
+"""Phase 3 inheritance strength sweep.
 
-Compares:
-  1. Phase 3 Inheritance (use_strategy_inheritance=true, dynamic budget)
-  2. NoInherit ablation (use_strategy_inheritance=false, dynamic budget)
-  3. Phase 2 baseline (no inheritance, dynamic budget) = NoInherit
-
-Section 33.3.
+Tests multiple inheritance_strength values with paired seeds.
 """
 
 import time
@@ -21,31 +16,11 @@ from ..metrics import (
     compute_reuse_concentration,
 )
 
-VARIANTS = {
-    "Phase3_Inherit": {
-        "use_strategy_inheritance": True,
-        "budget_mode": "dynamic",
-        "pool_mode": "soft_pressure",
-    },
-    "NoInherit_Ablation": {
-        "use_strategy_inheritance": False,
-        "budget_mode": "dynamic",
-        "pool_mode": "soft_pressure",
-    },
-    "NoInherit_FixedBudget": {
-        "use_strategy_inheritance": False,
-        "budget_mode": "fixed",
-        "pool_mode": "soft_pressure",
-    },
-    "Inherit_FixedBudget": {
-        "use_strategy_inheritance": True,
-        "budget_mode": "fixed",
-        "pool_mode": "soft_pressure",
-    },
-}
+STRENGTHS = [0.5, 0.7, 0.9, 1.0]
 
 
-def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, seed):
+def _make_config(num_components, solution_capacity, max_fe, pop_size, seed,
+                 inheritance_strength):
     return {
         "problem": {
             "num_components": num_components,
@@ -57,7 +32,7 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
             "max_function_evaluations": max_fe,
         },
         "shared_pool": {
-            "mode": variant["pool_mode"],
+            "mode": "soft_pressure",
             "epsilon": 0.01,
             "tau": 1.0,
             "capacity_reference": 5,
@@ -71,7 +46,7 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
             "quality_loss_threshold": 0.02,
         },
         "budget": {
-            "mode": variant["budget_mode"],
+            "mode": "dynamic",
             "base_budget": 2.0,
             "alpha_pareto": 1.0,
             "beta_crowding": 1.0,
@@ -80,10 +55,10 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
         },
         "rebirth": {
             "use_rebirth": True,
-            "use_strategy_inheritance": variant["use_strategy_inheritance"],
+            "use_strategy_inheritance": True,
             "elimination_interval": 3,
             "replacement_rate": 0.2,
-            "inheritance_strength": 0.5,
+            "inheritance_strength": inheritance_strength,
             "inheritance_smoothing": 0.1,
             "preference_learning_rate": 0.01,
             "keep_reference_direction": True,
@@ -126,37 +101,35 @@ def _extract_summary(archive, problem, fe_count, agents, elapsed):
     }
 
 
-def run_phase3_ablation(
+def run_inheritance_sweep(
     problem_type="high_synergy",
     num_components=30,
     solution_capacity=10,
     max_fe=5000,
     population_size=50,
     seed=0,
-    n_runs=5,
+    n_runs=30,
     verbose=True,
 ):
     print(f"\n{'#'*90}")
-    print(f"#  Phase 3 Ablation: Strategy Inheritance Validation")
-    print(f"#  Problem: MOSCSP ({problem_type}), M={num_components}, K={solution_capacity}")
-    print(f"#  Budget: {max_fe} FE, {n_runs} runs per variant")
+    print(f"#  Phase 3 Inheritance Strength Sweep")
+    print(f"#  Strengths: {STRENGTHS}")
+    print(f"#  {n_runs} paired runs, MOSCSP ({problem_type}), M={num_components}, K={solution_capacity}")
     print(f"{'#'*90}")
 
-    all_results = {name: [] for name in VARIANTS}
-    total = len(VARIANTS) * n_runs
+    all_results = {s: [] for s in STRENGTHS}
+    total = len(STRENGTHS) * n_runs
     count = 0
 
-    for vname, variant in VARIANTS.items():
-        for run in range(n_runs):
+    for run in range(n_runs):
+        run_seed = seed + run
+        # Same problem instance for all strengths (paired design)
+        problem = generate_moscp_instance(num_components, solution_capacity,
+                                           problem_type, 1.0, run_seed)
+        for eta in STRENGTHS:
             count += 1
-            run_seed = seed + run
-            if verbose:
-                print(f"  [{count}/{total}] {vname} run {run+1}/{n_runs}...", end=" ")
-
-            problem = generate_moscp_instance(num_components, solution_capacity,
-                                              problem_type, 1.0, run_seed)
-            config = _make_config(variant, num_components, solution_capacity,
-                                  max_fe, population_size, run_seed)
+            config = _make_config(num_components, solution_capacity, max_fe,
+                                   population_size, run_seed, eta)
             np.random.seed(run_seed)
             start = time.perf_counter()
             opt = MOSPPSOptimizer(problem, config)
@@ -165,31 +138,32 @@ def run_phase3_ablation(
             elapsed = time.perf_counter() - start
 
             s = _extract_summary(opt.archive, problem, opt.fe_count, opt.agents, elapsed)
-            all_results[vname].append(s)
+            all_results[eta].append(s)
 
             if verbose:
-                print(f"|A|={s['archive_size']}, HV={s['hypervolume']:.2f}, JD={s['avg_jaccard_distance']:.4f}")
+                print(f"  [{count}/{total}] eta={eta} run {run+1}/{n_runs}  "
+                      f"HV={s['hypervolume']:.2f} JD={s['avg_jaccard_distance']:.4f}")
 
     # Aggregate
     metrics_keys = ["archive_size", "hypervolume", "avg_jaccard_distance",
                     "component_entropy_norm", "reuse_concentration", "runtime_seconds"]
-    aggregated = {}
 
     print(f"\n{'='*90}")
-    print(f"  Phase 3 Ablation Results (mean over {n_runs} runs)")
+    print(f"  Inheritance Strength Sweep Results (mean over {n_runs} paired runs)")
     print(f"{'='*90}")
-    header = f"{'Variant':<28} {'|A|':>6} {'HV':>10} {'Jaccard':>9} {'Entropy':>9} {'Gini':>9} {'Time(s)':>8}"
+    header = f"{'η':<10} {'|A|':>6} {'HV':>10} {'Jaccard':>9} {'Entropy':>9} {'Gini':>9} {'Time(s)':>8}"
     print(header)
     print("-" * 90)
 
-    for vname in VARIANTS:
-        runs = all_results[vname]
+    aggregated = {}
+    for eta in STRENGTHS:
+        runs = all_results[eta]
         agg = {}
         for k in metrics_keys:
             agg[k] = np.mean([r[k] for r in runs])
-        aggregated[vname] = agg
+        aggregated[eta] = agg
 
-        row = f"{vname:<28}"
+        row = f"η={eta:<7.1f}"
         for k in metrics_keys:
             val = agg[k]
             if k == "runtime_seconds":
@@ -202,21 +176,37 @@ def run_phase3_ablation(
 
     print("-" * 90)
 
-    p3 = aggregated["Phase3_Inherit"]
-    ni = aggregated["NoInherit_Ablation"]
-    print(f"\n  Inheritance vs NoInherit (both dynamic budget):")
-    print(f"    HV change:       {p3['hypervolume'] - ni['hypervolume']:+.3f}")
-    print(f"    Jaccard change:  {p3['avg_jaccard_distance'] - ni['avg_jaccard_distance']:+.4f}")
-    print(f"    Entropy change:  {p3['component_entropy_norm'] - ni['component_entropy_norm']:+.4f}")
-    print(f"    Gini change:     {p3['reuse_concentration'] - ni['reuse_concentration']:+.4f}")
+    # Paired comparison: each strength vs 0.5 baseline
+    baseline = np.array([r["hypervolume"] for r in all_results[0.5]])
+    print(f"\n  Paired differences vs η=0.5 (n={n_runs}):")
+    print(f"  {'η':<8} {'HV diff':>10} {'±std':>8} {'95%CI':>18} {'t':>8} {'sig':>8}")
+    print(f"  {'-'*60}")
+    for eta in STRENGTHS[1:]:
+        values = np.array([r["hypervolume"] for r in all_results[eta]])
+        diffs = values - baseline
+        mean_diff = diffs.mean()
+        std_diff = diffs.std(ddof=1)
+        se = std_diff / np.sqrt(n_runs)
+        ci_lo = mean_diff - 1.96 * se
+        ci_hi = mean_diff + 1.96 * se
+        t_stat = mean_diff / se if se > 0 else 0.0
+        sig = "***" if abs(t_stat) > 2.58 else ("**" if abs(t_stat) > 1.96 else "n.s.")
+        print(f"  η={eta:<6.1f} {mean_diff:>+10.3f} {std_diff:>8.2f}  [{ci_lo:>+7.3f}, {ci_hi:>+7.3f}] {t_stat:>+8.3f} {sig:>6}")
+
     print(f"{'='*90}\n")
+
+    # Best strength recommendation
+    best_eta = max(STRENGTHS, key=lambda e: aggregated[e]["hypervolume"])
+    best_hv = aggregated[best_eta]["hypervolume"]
+    print(f"  Best HV: η={best_eta} (HV={best_hv:.3f})")
+    print(f"  Recommendation: inheritance_strength = {best_eta}")
 
     return {"all_results": all_results, "aggregated": aggregated}
 
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Run Phase 3 ablation experiments")
+    parser = argparse.ArgumentParser(description="Phase 3 inheritance strength sweep")
     parser.add_argument("--problem", type=str, default="high_synergy",
                         choices=["low_synergy", "high_synergy", "multi_cluster"])
     parser.add_argument("--num_components", type=int, default=30)
@@ -224,9 +214,9 @@ if __name__ == "__main__":
     parser.add_argument("--max_fe", type=int, default=5000)
     parser.add_argument("--population_size", type=int, default=50)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--n_runs", type=int, default=5)
+    parser.add_argument("--n_runs", type=int, default=30)
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
-    run_phase3_ablation(args.problem, args.num_components, args.solution_capacity,
-                        args.max_fe, args.population_size, args.seed, args.n_runs,
-                        verbose=not args.quiet)
+    run_inheritance_sweep(args.problem, args.num_components, args.solution_capacity,
+                           args.max_fe, args.population_size, args.seed, args.n_runs,
+                           verbose=not args.quiet)

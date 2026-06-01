@@ -57,7 +57,7 @@ def _default_config() -> dict:
         "rebirth": {
             "use_rebirth": True,
             "use_strategy_inheritance": False,
-            "elimination_interval": 10,
+            "elimination_interval": 3,
             "replacement_rate": 0.2,
             "inheritance_strength": 0.5,
             "inheritance_smoothing": 0.1,

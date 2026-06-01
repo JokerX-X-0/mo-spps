@@ -39,12 +39,14 @@ def generate_add_candidates(
 
 
 def generate_replace_candidates(
-    solution: set[int], shop: list[int]
+    solution: set[int], shop: list[int], rng: np.random.Generator
 ) -> list[set[int]]:
     """Generate candidates by replacing existing components with shop components.
 
     Section 9.2: S' = (S_i \\ {r}) ∪ {j}.
-    Excludes identity swaps (j == r) and swaps that produce duplicates (j already in S).
+    For each shop component j, one random replacement partner r ∈ S_i is
+    chosen (rather than all |S_i|, to bound evaluations per operation).
+    Excludes identity swaps (j == r) and swaps where j is already in S.
     """
     if not solution:
         return []
@@ -53,14 +55,14 @@ def generate_replace_candidates(
     for j in shop:
         if j in solution:
             continue
-        for r in sol_list:
-            new_sol = (solution - {r}) | {j}
-            candidates.append(new_sol)
+        r = int(rng.choice(sol_list))
+        new_sol = (solution - {r}) | {j}
+        candidates.append(new_sol)
     return candidates
 
 
 def generate_all_candidates(
-    solution: set[int], shop: list[int], capacity: int
+    solution: set[int], shop: list[int], capacity: int, rng: np.random.Generator
 ) -> list[set[int]]:
     """Generate all candidates: add (if |S| < K) + replace.
 
@@ -68,7 +70,7 @@ def generate_all_candidates(
     """
     candidates = []
     candidates.extend(generate_add_candidates(solution, shop, capacity))
-    candidates.extend(generate_replace_candidates(solution, shop))
+    candidates.extend(generate_replace_candidates(solution, shop, rng))
     return candidates
 
 
