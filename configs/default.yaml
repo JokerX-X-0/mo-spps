@@ -27,11 +27,11 @@ local_search:
   quality_loss_threshold: 0.02
 
 budget:
-  mode: fixed
-  base_budget: 3.0
+  mode: dynamic
+  base_budget: 2.0
   alpha_pareto: 1.0
   beta_crowding: 1.0
-  delta_decision_diversity: 1.0
+  delta_decision_diversity: 0.4
   gamma_exploration: 0.0
 
 rebirth:

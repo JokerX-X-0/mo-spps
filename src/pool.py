@@ -95,8 +95,48 @@ class SharedPool:
             return self._sample_soft_pressure(preference, population, size, rng)
         elif self.mode == "hard_cap":
             return self._sample_hard_cap(preference, size, rng)
+        elif self.mode == "none":
+            return self._sample_none(preference, size, rng)
         else:
             raise ValueError(f"Unknown pool mode: {self.mode}")
+
+    def _sample_none(
+        self,
+        preference: np.ndarray,
+        size: int,
+        rng: np.random.Generator,
+    ) -> list[int]:
+        """Uniform sampling without pool pressure.
+
+        p_j ∝ rho_j * pi_{i,j} — no occupancy factor.
+        """
+        M = self.num_components
+        components = list(self.capacities.keys())
+
+        result: list[int] = []
+        probs = np.zeros(M)
+
+        for _ in range(size):
+            for idx, j in enumerate(components):
+                if j in result:
+                    probs[idx] = 0.0
+                    continue
+                probs[idx] = self.base_weights.get(j, 1.0) * preference[idx]
+
+            total = probs.sum()
+            if total <= 0:
+                candidates = [c for c in components if c not in result]
+                if not candidates:
+                    break
+                chosen = int(rng.choice(candidates))
+            else:
+                probs /= total
+                chosen_idx = int(rng.choice(M, p=probs))
+                chosen = components[chosen_idx]
+
+            result.append(chosen)
+
+        return result
 
     def _sample_soft_pressure(
         self,
@@ -234,8 +274,8 @@ class SharedPool:
                     self._remaining[j] + occupancy[j] == self.capacities[j]
                 ), f"Hard-cap invariant violated for component {j}"
 
-        # Soft-pressure: occupancy should match population
-        if self.mode == "soft_pressure":
+        # Soft-pressure / none: occupancy should match population
+        if self.mode in ("soft_pressure", "none"):
             for j in self.capacities:
                 expected = sum(1 for a in population if j in a.solution)
                 assert (
