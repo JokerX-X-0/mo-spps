@@ -36,7 +36,7 @@ budget:
 
 rebirth:
   use_rebirth: true
-  use_strategy_inheritance: false
+  use_strategy_inheritance: true
   elimination_interval: 10
   replacement_rate: 0.2
   inheritance_strength: 0.5

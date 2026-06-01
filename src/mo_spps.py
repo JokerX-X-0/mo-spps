@@ -675,13 +675,29 @@ class MOSPPSOptimizer:
         Phase 3: pi_new = (1 - eta) * pi_random + eta * pi_elite
         where pi_elite is derived from the archive elite matching w_new.
         """
-        # Find archive elite matching the target objective preference
-        elite_result = self.archive.select_elite_by_direction(w_new)
-
-        if elite_result is None:
+        # Find archive elite matching w_new using normalized objectives (§17.4)
+        if len(self.archive) == 0:
             return self.rng.dirichlet(np.ones(self.num_components))
 
-        elite_sol, _ = elite_result
+        # Normalize archive objectives to [0,1] range for fair cosine comparison
+        arch_objs = self.archive.get_objectives_array()
+        obj_mins = arch_objs.min(axis=0)
+        obj_maxs = arch_objs.max(axis=0)
+        ranges = obj_maxs - obj_mins
+        ranges[ranges == 0] = 1.0
+        norm_objs = (arch_objs - obj_mins) / ranges
+
+        best_idx = 0
+        best_cos = -np.inf
+        for i, nobj in enumerate(norm_objs):
+            cos_sim = float(np.dot(nobj, w_new) / (
+                np.linalg.norm(nobj) * np.linalg.norm(w_new)
+            )) if np.linalg.norm(nobj) > 1e-12 else 0.0
+            if cos_sim > best_cos:
+                best_cos = cos_sim
+                best_idx = i
+
+        elite_sol = self.archive.solutions[best_idx]
         M = self.num_components
         lambda_s = self.inheritance_smoothing
         eta = self.inheritance_strength
