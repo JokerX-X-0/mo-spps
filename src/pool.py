@@ -23,6 +23,7 @@ class SharedPool:
         mode: str = "soft_pressure",
         epsilon: float = 0.01,
         tau: float = 1.0,
+        kappa: float = 0.0,
     ):
         self.capacities = capacities
         self.base_weights = base_weights or {
@@ -31,9 +32,13 @@ class SharedPool:
         self.mode = mode
         self.epsilon = epsilon
         self.tau = tau
+        self.kappa = kappa
 
-        # Mutable state used only in hard-cap mode (deferred to Phase 4)
+        # Mutable state used only in hard-cap mode
         self._remaining: dict[int, int] = dict(capacities)
+
+        # Component utility scores for utility-guided sampling (Phase 4)
+        self._component_utilities: dict[int, float] = {}
 
     @property
     def num_components(self) -> int:
@@ -75,9 +80,11 @@ class SharedPool:
     ) -> list[int]:
         """Sample components without replacement using soft-pressure probabilities.
 
-        Simplified formula (Section 8.3, Phase 1: U=0, kappa=0):
+        Full formula (Section 8.2):
 
-            p_j ∝ (epsilon + q_tilde_j / Q_j)^tau * rho_j * pi_{i,j}
+            p_j ∝ (epsilon + q_tilde_j / Q_j)^tau * rho_j * pi_{i,j} * (1 + kappa * U_j)
+
+        When kappa=0, reduces to the simplified form (Section 8.3).
 
         Sampling is done without replacement. After each draw, the selected
         component's probability is set to 0 for the next draw.
@@ -161,10 +168,12 @@ class SharedPool:
                 Q_j = self.capacities[j]
                 rho_j = self.base_weights.get(j, 1.0)
                 pi_ij = preference[idx]
+                U_j = self._component_utilities.get(j, 0.0)
+                pressure_factor = q_tilde / max(Q_j, 1)
+                utility_boost = 1.0 + self.kappa * U_j
                 probs[idx] = (
-                    (self.epsilon + q_tilde / max(Q_j, 1)) ** self.tau
-                    * rho_j
-                    * pi_ij
+                    (self.epsilon + pressure_factor) ** self.tau
+                    * rho_j * pi_ij * utility_boost
                 )
 
             total = probs.sum()
@@ -251,6 +260,14 @@ class SharedPool:
             for j in removed:
                 if j in self._remaining:
                     self._remaining[j] += 1
+
+    def set_component_utilities(self, utilities: dict[int, float]) -> None:
+        """Update component utility scores U_j for utility-guided sampling.
+
+        Section 8.2. U_j measures historical contribution to the archive.
+        Set to empty dict or all-zeros to disable utility guidance.
+        """
+        self._component_utilities = dict(utilities)
 
     def validate(self, population: list[Agent]) -> None:
         """Assert pool invariants. Section 11.4.

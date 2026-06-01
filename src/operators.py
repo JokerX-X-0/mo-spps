@@ -61,16 +61,32 @@ def generate_replace_candidates(
     return candidates
 
 
-def generate_all_candidates(
-    solution: set[int], shop: list[int], capacity: int, rng: np.random.Generator
+def generate_release_candidates(
+    solution: set[int],
 ) -> list[set[int]]:
-    """Generate all candidates: add (if |S| < K) + replace.
+    """Generate candidates by removing one component from the solution.
+
+    Section 9.3: S' = S_i \\ {r} for each r in S_i.
+    Requires at least 2 components to avoid empty solutions.
+    """
+    if len(solution) <= 1:
+        return []
+    return [solution - {r} for r in solution]
+
+
+def generate_all_candidates(
+    solution: set[int], shop: list[int], capacity: int, rng: np.random.Generator,
+    include_release: bool = False,
+) -> list[set[int]]:
+    """Generate all candidates: add (if |S| < K) + replace + optional release.
 
     Section 9 combined.
     """
     candidates = []
     candidates.extend(generate_add_candidates(solution, shop, capacity))
     candidates.extend(generate_replace_candidates(solution, shop, rng))
+    if include_release:
+        candidates.extend(generate_release_candidates(solution))
     return candidates
 
 

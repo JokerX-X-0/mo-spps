@@ -67,6 +67,7 @@ class MOSPPSOptimizer:
             mode=pool_cfg.get("mode", "soft_pressure"),
             epsilon=pool_cfg.get("epsilon", 0.01),
             tau=pool_cfg.get("tau", 1.0),
+            kappa=pool_cfg.get("utility_guidance_kappa", 0.0),
         )
 
         # Population
@@ -75,7 +76,10 @@ class MOSPPSOptimizer:
         # Archive
         archive_cfg = config.get("archive", {})
         self.archive = ParetoArchive(
-            max_size=archive_cfg.get("max_size", 200)
+            max_size=archive_cfg.get("max_size", 200),
+            prune_method=archive_cfg.get("prune_method", "crowding"),
+            objective_weight=archive_cfg.get("objective_weight", 0.7),
+            decision_weight=archive_cfg.get("decision_weight", 0.3),
         )
 
         # Reference directions
@@ -136,6 +140,12 @@ class MOSPPSOptimizer:
         self.quality_loss_threshold = local_cfg.get(
             "quality_loss_threshold", 0.02
         )
+        self.use_novelty_acceptance = local_cfg.get(
+            "use_novelty_acceptance", False
+        )
+        self.use_release_operation = local_cfg.get(
+            "use_release_operation", False
+        )
 
         # Termination
         self.max_fe = config.get("population", {}).get(
@@ -157,6 +167,10 @@ class MOSPPSOptimizer:
     def initialize(self) -> None:
         """Algorithm initialization. Section 18.1, Section 19 (Initialize block)."""
         reset_id_counter()
+
+        # Reset hard-cap pool to full capacity before initialization
+        if self.pool.mode == "hard_cap":
+            self.pool.reset_hard_cap()
 
         dir_assignments = refdir.assign_directions(
             self.population_size, self.directions, mode="round_robin"
@@ -239,6 +253,12 @@ class MOSPPSOptimizer:
 
         # 5. Allocate budgets
         self.allocate_budgets()
+
+        # 5.5 Compute component utilities for utility-guided sampling (Phase 4)
+        if self.pool.kappa > 0:
+            self.pool.set_component_utilities(
+                self._compute_component_utilities()
+            )
 
         # 6. Local construction for each agent
         self._local_construct_all()
@@ -416,7 +436,8 @@ class MOSPPSOptimizer:
 
         # Generate candidates
         candidates = operators.generate_all_candidates(
-            agent.solution, shop, self.solution_capacity, self.rng
+            agent.solution, shop, self.solution_capacity, self.rng,
+            include_release=self.use_release_operation,
         )
 
         if not candidates:
@@ -516,8 +537,49 @@ class MOSPPSOptimizer:
             if cand_score > curr_score:
                 return True
 
-        # Rule 4 (deferred): novelty-based acceptance
-        # Rule 5: probabilistic acceptance (deferred)
+        # Rule 4 (Phase 4): novelty-based acceptance
+        if self.use_novelty_acceptance:
+            novelty = operators.compute_novelty(
+                candidate_sol, self.archive.solutions
+            )
+            if novelty > self.novelty_threshold:
+                cand_score = operators.compute_preference_score(
+                    candidate_obj,
+                    current.objective_preference,
+                    self.problem.ideal_point,
+                    self.problem.nadir_point,
+                )
+                curr_score = operators.compute_preference_score(
+                    current_obj,
+                    current.objective_preference,
+                    self.problem.ideal_point,
+                    self.problem.nadir_point,
+                )
+                if cand_score >= curr_score - self.quality_loss_threshold:
+                    return True
+
+        # Rule 5 (Phase 4): probabilistic acceptance
+        if self.use_probabilistic_acceptance:
+            cand_score = operators.compute_preference_score(
+                candidate_obj,
+                current.objective_preference,
+                self.problem.ideal_point,
+                self.problem.nadir_point,
+            )
+            curr_score = operators.compute_preference_score(
+                current_obj,
+                current.objective_preference,
+                self.problem.ideal_point,
+                self.problem.nadir_point,
+            )
+            if cand_score < curr_score:
+                delta_g = cand_score - curr_score
+                p_accept = float(
+                    np.exp(delta_g / max(self.temperature, 1e-6))
+                )
+                if self.rng.random() < p_accept:
+                    return True
+
         return False
 
     def _update_preferences(
@@ -717,6 +779,30 @@ class MOSPPSOptimizer:
         pi_new /= pi_new.sum()
 
         return pi_new
+
+    def _compute_component_utilities(self) -> dict[int, float]:
+        """Compute component utility scores U_j from archive membership.
+
+        Section 8.2: U_j = frequency of component j in the Pareto archive,
+        normalized to [0, 1]. Components appearing in many archive solutions
+        are considered high-utility.
+
+        Returns:
+            dict mapping component index j to utility score in [0, 1].
+        """
+        M = self.num_components
+        utilities: dict[int, float] = {j: 0.0 for j in range(M)}
+
+        if not self.archive.solutions:
+            return utilities
+
+        n_archive = len(self.archive.solutions)
+        for sol in self.archive.solutions:
+            for j in sol:
+                if j in utilities:
+                    utilities[j] += 1.0 / n_archive
+
+        return utilities
 
     # ------------------------------------------------------------------
     #  METRICS

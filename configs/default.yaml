@@ -15,12 +15,14 @@ shared_pool:
   mode: soft_pressure
   epsilon: 0.01
   tau: 1.0
-  utility_guidance_kappa: 0.0
+  utility_guidance_kappa: 0.5
   capacity_reference: 5
 
 local_search:
   shop_size: 5
-  use_probabilistic_acceptance: false
+  use_probabilistic_acceptance: true
+  use_novelty_acceptance: true
+  use_release_operation: true
   temperature: 1.0
   archive_contribution_threshold: 0.0
   novelty_threshold: 0.3
@@ -32,7 +34,7 @@ budget:
   alpha_pareto: 1.0
   beta_crowding: 1.0
   delta_decision_diversity: 0.4
-  gamma_exploration: 0.0
+  gamma_exploration: 0.5
 
 rebirth:
   use_rebirth: true
@@ -49,7 +51,7 @@ rebirth:
 
 archive:
   max_size: 200
-  prune_method: crowding
+  prune_method: hybrid_objective_decision
   objective_weight: 0.7
   decision_weight: 0.3
   remove_duplicates: true

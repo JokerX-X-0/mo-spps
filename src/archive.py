@@ -18,8 +18,17 @@ class ParetoArchive:
     A^{t+1} = ND(A^t ∪ Pop^t ∪ C^t)
     """
 
-    def __init__(self, max_size: int = 200):
+    def __init__(
+        self,
+        max_size: int = 200,
+        prune_method: str = "crowding",
+        objective_weight: float = 0.7,
+        decision_weight: float = 0.3,
+    ):
         self.max_size = max_size
+        self.prune_method = prune_method
+        self.objective_weight = objective_weight
+        self.decision_weight = decision_weight
         self.solutions: list[set[int]] = []
         self.objectives: list[np.ndarray] = []
 
@@ -75,7 +84,13 @@ class ParetoArchive:
 
         # Prune
         if len(self.solutions) > self.max_size:
-            self.prune_by_crowding()
+            if self.prune_method == "hybrid_objective_decision":
+                self.prune_by_hybrid_score(
+                    omega_o=self.objective_weight,
+                    omega_d=self.decision_weight,
+                )
+            else:
+                self.prune_by_crowding()
 
         return added_count
 
