@@ -1,5 +1,5 @@
-# MO-SPPS Default Configuration
-# Section 20: Recommended default settings.
+# MO-SPPS Phase 1 + Improvement #1: Continuous Soft-Pressure Pool
+# Fixed budget, no inheritance, no Phase 4 features.
 
 problem:
   num_objectives: 2
@@ -12,33 +12,33 @@ population:
   max_function_evaluations: 5000
 
 shared_pool:
-  mode: soft_pressure
+  mode: continuous
   epsilon: 0.01
   tau: 1.0
-  utility_guidance_kappa: 0.5
+  utility_guidance_kappa: 0.0
   capacity_reference: 5
 
 local_search:
   shop_size: 5
-  use_probabilistic_acceptance: true
-  use_novelty_acceptance: true
-  use_release_operation: true
+  use_probabilistic_acceptance: false
+  use_novelty_acceptance: false
+  use_release_operation: false
   temperature: 1.0
   archive_contribution_threshold: 0.0
   novelty_threshold: 0.3
   quality_loss_threshold: 0.02
 
 budget:
-  mode: dynamic
-  base_budget: 2.0
-  alpha_pareto: 1.0
-  beta_crowding: 1.0
-  delta_decision_diversity: 0.4
-  gamma_exploration: 0.5
+  mode: fixed
+  base_budget: 3.0
+  alpha_pareto: 0.0
+  beta_crowding: 0.0
+  delta_decision_diversity: 0.0
+  gamma_exploration: 0.0
 
 rebirth:
   use_rebirth: true
-  use_strategy_inheritance: true
+  use_strategy_inheritance: false
   elimination_interval: 3
   replacement_rate: 0.2
   inheritance_strength: 0.5
@@ -51,7 +51,7 @@ rebirth:
 
 archive:
   max_size: 200
-  prune_method: hybrid_objective_decision
+  prune_method: crowding
   objective_weight: 0.7
   decision_weight: 0.3
   remove_duplicates: true
