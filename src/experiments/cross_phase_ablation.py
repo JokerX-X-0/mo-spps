@@ -1,17 +1,15 @@
-"""Phase 4 ablation experiments: validate all Phase 4 features.
+"""Cross-phase ablation: measure incremental contribution of each phase.
 
 Compares:
-  1. Phase4_Full (all Phase 4 features on, continuous pool)
-  2. Phase3_Baseline (all Phase 4 features off)
-  3. NoPool (continuous pool disabled, mode=none)
-  4. NoUtilityGuidance (kappa=0)
-  5. NoNoveltyAcceptance
-  6. NoProbAcceptance
-  7. NoReleaseOp
-  8. CrowdingOnlyPrune
-  9. HardCapPool
+  1. Phase1: continuous pool + fixed budget
+  2. Phase2: + dynamic budget
+  3. Phase3: + strategy inheritance
+  4. Phase4_Full: + all Phase 4 features
+  5. NoPool_Phase1: no pool + fixed budget (pool baseline)
+  6. NoPool_Phase4: no pool + all features (pool baseline)
+  7. HardCapPool: hard-cap pool (alternative pool mechanism)
 
-Section 33.4.
+Uses unified reference point from optimizer.ref_point for fair HV comparison.
 """
 
 import time
@@ -28,100 +26,92 @@ from ..metrics import (
 )
 
 VARIANTS = {
+    "Phase1": {
+        "pool_mode": "continuous",
+        "budget_mode": "fixed",
+        "base_budget": 3.0,
+        "use_strategy_inheritance": False,
+        "elimination_interval": 10,
+        "gamma": 0.0,
+        "kappa": 0.0,
+        "use_probabilistic_acceptance": False,
+        "use_novelty_acceptance": False,
+        "use_release_operation": False,
+        "prune_method": "crowding",
+    },
+    "Phase2": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "base_budget": 2.0,
+        "use_strategy_inheritance": False,
+        "elimination_interval": 10,
+        "gamma": 0.0,
+        "kappa": 0.0,
+        "use_probabilistic_acceptance": False,
+        "use_novelty_acceptance": False,
+        "use_release_operation": False,
+        "prune_method": "crowding",
+    },
+    "Phase3": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "base_budget": 2.0,
+        "use_strategy_inheritance": True,
+        "elimination_interval": 10,
+        "gamma": 0.0,
+        "kappa": 0.0,
+        "use_probabilistic_acceptance": False,
+        "use_novelty_acceptance": False,
+        "use_release_operation": False,
+        "prune_method": "crowding",
+    },
     "Phase4_Full": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
+        "base_budget": 2.0,
+        "use_strategy_inheritance": True,
+        "elimination_interval": 3,
         "gamma": 0.5,
         "kappa": 0.5,
-        "use_strategy_inheritance": True,
         "use_probabilistic_acceptance": True,
         "use_novelty_acceptance": True,
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
-    "Phase3_Baseline": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
+    "NoPool_Phase1": {
+        "pool_mode": "none",
+        "budget_mode": "fixed",
+        "base_budget": 3.0,
+        "use_strategy_inheritance": False,
+        "elimination_interval": 10,
         "gamma": 0.0,
         "kappa": 0.0,
-        "use_strategy_inheritance": True,
         "use_probabilistic_acceptance": False,
         "use_novelty_acceptance": False,
         "use_release_operation": False,
         "prune_method": "crowding",
     },
-    "NoPool": {
+    "NoPool_Phase4": {
         "pool_mode": "none",
         "budget_mode": "dynamic",
+        "base_budget": 2.0,
+        "use_strategy_inheritance": True,
+        "elimination_interval": 3,
         "gamma": 0.5,
         "kappa": 0.5,
-        "use_strategy_inheritance": True,
         "use_probabilistic_acceptance": True,
         "use_novelty_acceptance": True,
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
-    },
-    "NoUtilityGuidance": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.5,
-        "kappa": 0.0,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": True,
-        "use_novelty_acceptance": True,
-        "use_release_operation": True,
-        "prune_method": "hybrid_objective_decision",
-    },
-    "NoNoveltyAcceptance": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.5,
-        "kappa": 0.5,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": True,
-        "use_novelty_acceptance": False,
-        "use_release_operation": True,
-        "prune_method": "hybrid_objective_decision",
-    },
-    "NoProbAcceptance": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.5,
-        "kappa": 0.5,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": False,
-        "use_novelty_acceptance": True,
-        "use_release_operation": True,
-        "prune_method": "hybrid_objective_decision",
-    },
-    "NoReleaseOp": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.5,
-        "kappa": 0.5,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": True,
-        "use_novelty_acceptance": True,
-        "use_release_operation": False,
-        "prune_method": "hybrid_objective_decision",
-    },
-    "CrowdingOnlyPrune": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.5,
-        "kappa": 0.5,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": True,
-        "use_novelty_acceptance": True,
-        "use_release_operation": True,
-        "prune_method": "crowding",
     },
     "HardCapPool": {
         "pool_mode": "hard_cap",
         "budget_mode": "dynamic",
+        "base_budget": 2.0,
+        "use_strategy_inheritance": True,
+        "elimination_interval": 3,
         "gamma": 0.5,
         "kappa": 0.0,
-        "use_strategy_inheritance": True,
         "use_probabilistic_acceptance": True,
         "use_novelty_acceptance": True,
         "use_release_operation": True,
@@ -160,16 +150,16 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
         },
         "budget": {
             "mode": variant["budget_mode"],
-            "base_budget": 2.0,
-            "alpha_pareto": 1.0,
-            "beta_crowding": 1.0,
-            "delta_decision_diversity": 0.4,
+            "base_budget": variant["base_budget"],
+            "alpha_pareto": 1.0 if variant["budget_mode"] == "dynamic" else 0.0,
+            "beta_crowding": 1.0 if variant["budget_mode"] == "dynamic" else 0.0,
+            "delta_decision_diversity": 0.4 if variant["budget_mode"] == "dynamic" else 0.0,
             "gamma_exploration": variant["gamma"],
         },
         "rebirth": {
             "use_rebirth": True,
             "use_strategy_inheritance": variant["use_strategy_inheritance"],
-            "elimination_interval": 3,
+            "elimination_interval": variant["elimination_interval"],
             "replacement_rate": 0.2,
             "inheritance_strength": 0.5,
             "inheritance_smoothing": 0.1,
@@ -193,7 +183,7 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
     }
 
 
-def _extract_summary(archive, problem, fe_count, agents, elapsed, ref_point=None):
+def _extract_summary(archive, problem, fe_count, agents, elapsed, ref_point):
     arch_objs = archive.get_objectives_array()
     hv = 0.0
     if arch_objs.size > 0 and ref_point is not None:
@@ -213,7 +203,7 @@ def _extract_summary(archive, problem, fe_count, agents, elapsed, ref_point=None
     }
 
 
-def run_phase4_ablation(
+def run_cross_phase_ablation(
     problem_type="high_synergy",
     num_components=30,
     solution_capacity=10,
@@ -224,7 +214,7 @@ def run_phase4_ablation(
     verbose=True,
 ):
     print(f"\n{'#'*90}")
-    print(f"#  Phase 4 Ablation: All Features Validation")
+    print(f"#  Cross-Phase Ablation: Incremental Contribution of Each Phase")
     print(f"#  Problem: MOSCSP ({problem_type}), M={num_components}, K={solution_capacity}")
     print(f"#  Budget: {max_fe} FE, {n_runs} runs per variant")
     print(f"{'#'*90}")
@@ -263,9 +253,9 @@ def run_phase4_ablation(
     aggregated = {}
 
     print(f"\n{'='*90}")
-    print(f"  Phase 4 Ablation Results (mean over {n_runs} runs)")
+    print(f"  Cross-Phase Ablation Results (mean over {n_runs} runs)")
     print(f"{'='*90}")
-    header = f"{'Variant':<28} {'|A|':>6} {'HV':>10} {'Jaccard':>9} {'Entropy':>9} {'Gini':>9} {'Time(s)':>8}"
+    header = f"{'Variant':<22} {'|A|':>6} {'HV':>10} {'Jaccard':>9} {'Entropy':>9} {'Gini':>9} {'Time(s)':>8}"
     print(header)
     print("-" * 90)
 
@@ -276,7 +266,7 @@ def run_phase4_ablation(
             agg[k] = np.mean([r[k] for r in runs])
         aggregated[vname] = agg
 
-        row = f"{vname:<28}"
+        row = f"{vname:<22}"
         for k in metrics_keys:
             val = agg[k]
             if k == "runtime_seconds":
@@ -289,13 +279,39 @@ def run_phase4_ablation(
 
     print("-" * 90)
 
+    # Cross-phase incremental analysis
+    print(f"\n  Incremental contributions:")
+    phases = ["Phase1", "Phase2", "Phase3", "Phase4_Full"]
+    for i in range(1, len(phases)):
+        prev = aggregated[phases[i-1]]
+        curr = aggregated[phases[i]]
+        print(f"    {phases[i-1]} -> {phases[i]}:")
+        print(f"      HV change:       {curr['hypervolume'] - prev['hypervolume']:+.3f}")
+        print(f"      Jaccard change:  {curr['avg_jaccard_distance'] - prev['avg_jaccard_distance']:+.4f}")
+        print(f"      Entropy change:  {curr['component_entropy_norm'] - prev['component_entropy_norm']:+.4f}")
+        print(f"      Gini change:     {curr['reuse_concentration'] - prev['reuse_concentration']:+.4f}")
+
+    # Pool effect
+    print(f"\n  Pool contribution (continuous vs none):")
+    for label, pool_v, nopool_v in [
+        ("Phase1", "Phase1", "NoPool_Phase1"),
+        ("Phase4", "Phase4_Full", "NoPool_Phase4"),
+    ]:
+        pool = aggregated[pool_v]
+        nopool = aggregated[nopool_v]
+        print(f"    {label}: HV {pool['hypervolume']-nopool['hypervolume']:+.2f}, "
+              f"JD {pool['avg_jaccard_distance']-nopool['avg_jaccard_distance']:+.4f}, "
+              f"Gini {pool['reuse_concentration']-nopool['reuse_concentration']:+.4f}")
+
+    # HardCap comparison
     p4 = aggregated["Phase4_Full"]
-    p3 = aggregated["Phase3_Baseline"]
-    print(f"\n  Phase 4 vs Phase 3 baseline:")
-    print(f"    HV change:       {p4['hypervolume'] - p3['hypervolume']:+.3f}")
-    print(f"    Jaccard change:  {p4['avg_jaccard_distance'] - p3['avg_jaccard_distance']:+.4f}")
-    print(f"    Entropy change:  {p4['component_entropy_norm'] - p3['component_entropy_norm']:+.4f}")
-    print(f"    Gini change:     {p4['reuse_concentration'] - p3['reuse_concentration']:+.4f}")
+    hc = aggregated["HardCapPool"]
+    print(f"\n  Continuous vs HardCap (both Phase4):")
+    print(f"    HV change:       {p4['hypervolume'] - hc['hypervolume']:+.3f}")
+    print(f"    Jaccard change:  {p4['avg_jaccard_distance'] - hc['avg_jaccard_distance']:+.4f}")
+    print(f"    Entropy change:  {p4['component_entropy_norm'] - hc['component_entropy_norm']:+.4f}")
+    print(f"    Gini change:     {p4['reuse_concentration'] - hc['reuse_concentration']:+.4f}")
+
     print(f"{'='*90}\n")
 
     return {"all_results": all_results, "aggregated": aggregated}
@@ -303,7 +319,7 @@ def run_phase4_ablation(
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Run Phase 4 ablation experiments")
+    parser = argparse.ArgumentParser(description="Run cross-phase ablation experiments")
     parser.add_argument("--problem", type=str, default="high_synergy",
                         choices=["low_synergy", "high_synergy", "multi_cluster"])
     parser.add_argument("--num_components", type=int, default=30)
@@ -314,6 +330,6 @@ if __name__ == "__main__":
     parser.add_argument("--n_runs", type=int, default=30)
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
-    run_phase4_ablation(args.problem, args.num_components, args.solution_capacity,
-                         args.max_fe, args.population_size, args.seed, args.n_runs,
-                         verbose=not args.quiet)
+    run_cross_phase_ablation(args.problem, args.num_components, args.solution_capacity,
+                             args.max_fe, args.population_size, args.seed, args.n_runs,
+                             verbose=not args.quiet)
