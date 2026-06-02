@@ -1,0 +1,15 @@
+# Claude Code local settings
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
