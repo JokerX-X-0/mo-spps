@@ -1,5 +1,5 @@
-# MO-SPPS Phase 4: Full feature set
-# Continuous soft-pressure pool + dynamic budget + strategy inheritance + all Phase 4 features.
+# MO-SPPS Phase 3 + Improvement #1: Strategy Inheritance + Dynamic Budget + Continuous Pool
+# Dynamic budget, strategy inheritance, no Phase 4 features.
 
 problem:
   num_objectives: 2
@@ -15,14 +15,14 @@ shared_pool:
   mode: continuous
   epsilon: 0.01
   tau: 1.0
-  utility_guidance_kappa: 0.5
+  utility_guidance_kappa: 0.0
   capacity_reference: 5
 
 local_search:
   shop_size: 5
-  use_probabilistic_acceptance: true
-  use_novelty_acceptance: true
-  use_release_operation: true
+  use_probabilistic_acceptance: false
+  use_novelty_acceptance: false
+  use_release_operation: false
   temperature: 1.0
   archive_contribution_threshold: 0.0
   novelty_threshold: 0.3
@@ -34,12 +34,12 @@ budget:
   alpha_pareto: 1.0
   beta_crowding: 1.0
   delta_decision_diversity: 0.4
-  gamma_exploration: 0.5
+  gamma_exploration: 0.0
 
 rebirth:
   use_rebirth: true
   use_strategy_inheritance: true
-  elimination_interval: 3
+  elimination_interval: 10
   replacement_rate: 0.2
   inheritance_strength: 0.5
   inheritance_smoothing: 0.1
@@ -51,7 +51,7 @@ rebirth:
 
 archive:
   max_size: 200
-  prune_method: hybrid_objective_decision
+  prune_method: crowding
   objective_weight: 0.7
   decision_weight: 0.3
   remove_duplicates: true
