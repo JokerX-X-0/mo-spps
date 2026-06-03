@@ -319,6 +319,14 @@ class SharedPool:
                 if j in self._remaining:
                     self._remaining[j] += 1
 
+    def update_capacities(self, new_capacities: dict[int, int]) -> None:
+        """Update dynamic reference capacities for adaptive Q (Section 3.4).
+
+        Q_j changes affect the pressure denominator in continuous/soft_pressure
+        modes. Higher Q_j means weaker penalty for the same occupancy.
+        """
+        self.capacities = dict(new_capacities)
+
     def set_component_utilities(self, utilities: dict[int, float]) -> None:
         """Update component utility scores U_j for utility-guided sampling.
 

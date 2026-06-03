@@ -83,6 +83,14 @@ def _default_config() -> dict:
             "enabled": False,
             "region_threshold": 0.3,
         },
+        "adaptive_capacity": {
+            "use_adaptive_Q": False,
+            "alpha_Q": 2.0,
+            "base_capacity_Q0": 12,
+            "Q_min": 3,
+            "Q_max": 30,
+            "update_interval": 10,
+        },
         "experiment": {
             "seed": 0,
             "num_runs": 1,

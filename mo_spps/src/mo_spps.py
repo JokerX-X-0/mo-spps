@@ -156,8 +156,20 @@ class MOSPPSOptimizer:
         # Preference-region constrained novelty (optional extension)
         prn_cfg = config.get("region_novelty", {})
         self.use_region_novelty = prn_cfg.get("enabled", False)
-        self.region_threshold = prn_cfg.get("region_threshold", 0.5)
+        self.region_threshold = prn_cfg.get("region_threshold", 0.3)
         self._cached_region_archive: list[set[int]] | None = None
+
+        # Adaptive capacity — archive-driven Q_j (Point 3)
+        ac_cfg = config.get("adaptive_capacity", {})
+        self.use_adaptive_Q = ac_cfg.get("use_adaptive_Q", False)
+        self.alpha_Q = ac_cfg.get("alpha_Q", 2.0)
+        self.Q0 = ac_cfg.get("base_capacity_Q0", 5)
+        self.Q_min = ac_cfg.get("Q_min", 1)
+        self.Q_max = ac_cfg.get("Q_max", 20)
+        self.capacity_update_interval = ac_cfg.get("update_interval", 10)
+        self.contribution_metric = ac_cfg.get(
+            "contribution_metric", "archive_frequency_weighted_crowding"
+        )
 
         # Termination
         self.max_fe = config.get("population", {}).get(
@@ -271,6 +283,10 @@ class MOSPPSOptimizer:
 
         # 3. Multi-objective ranking
         self.assign_ranks_and_crowding()
+
+        # 3.5 Update adaptive capacities (Point 3)
+        if self.use_adaptive_Q and self.iteration % self.capacity_update_interval == 0:
+            self._update_adaptive_capacities()
 
         # 4. Compute decision-space diversity
         self.compute_decision_diversity()
@@ -845,6 +861,60 @@ class MOSPPSOptimizer:
     def _refresh_region_archive(self) -> None:
         """Invalidate cached region archive (called each iteration)."""
         self._cached_region_archive = None
+
+    def _compute_component_contributions(self) -> dict[int, float]:
+        """Compute component contribution scores C_j from archive.
+
+        Section 3.3: C_j = weighted frequency of component j in archive,
+        where weight q(S) = 1 + CD_obj(S) (crowding distance).
+        Normalized by total weighted sum.
+        """
+        M = self.num_components
+        contrib: dict[int, float] = {j: 0.0 for j in range(M)}
+
+        if not self.archive.solutions:
+            return contrib
+
+        # Compute crowding distance for archive objectives
+        archive_objs = self.archive.get_objectives_array()
+        cd = pareto.crowding_distance(archive_objs)
+        # Replace inf with max finite value for weighting
+        finite_cd = cd[np.isfinite(cd)]
+        max_cd = float(np.max(finite_cd)) if len(finite_cd) > 0 else 0.0
+        cd[np.isinf(cd)] = max_cd if max_cd > 0 else 1.0
+
+        total_weight = 0.0
+        for s_idx, sol in enumerate(self.archive.solutions):
+            weight = 1.0 + cd[s_idx]
+            for j in sol:
+                if j in contrib:
+                    contrib[j] += weight
+            total_weight += weight
+
+        total_weight_eps = total_weight + self.pool.epsilon
+        for j in contrib:
+            contrib[j] /= total_weight_eps
+
+        return contrib
+
+    def _update_adaptive_capacities(self) -> None:
+        """Update pool capacities Q_j based on archive component contributions.
+
+        Section 3.2: Q_j = clip(Q_0 * (1 + alpha_Q * C_j), Q_min, Q_max)
+
+        High-contribution components get larger Q_j → weaker pool penalty.
+        Low-contribution components keep base or minimum Q_j.
+        """
+        if not self.use_adaptive_Q:
+            return
+
+        C = self._compute_component_contributions()
+        new_capacities = {}
+        for j in range(self.num_components):
+            Q_raw = self.Q0 * (1.0 + self.alpha_Q * C[j])
+            new_capacities[j] = int(np.clip(Q_raw, self.Q_min, self.Q_max))
+
+        self.pool.update_capacities(new_capacities)
 
     def _compute_component_utilities(self) -> dict[int, float]:
         """Compute component utility scores U_j from archive membership.

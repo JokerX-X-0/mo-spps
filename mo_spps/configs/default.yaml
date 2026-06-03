@@ -65,6 +65,14 @@ region_novelty:
   enabled: false
   region_threshold: 0.3
 
+adaptive_capacity:
+  use_adaptive_Q: false
+  alpha_Q: 2.0
+  base_capacity_Q0: 12
+  Q_min: 3
+  Q_max: 30
+  update_interval: 10
+
 experiment:
   num_runs: 1
   seed: 0
