@@ -93,19 +93,20 @@ p_{i,j}^t=
 ### 1.4 默认参数
 
 ```yaml
-shared_pool:
+soft_pressure:
   mode: continuous
   epsilon: 0.01
   tau: 1.0
-  capacity_reference: 5
+  base_capacity_Q0: 5
+  rho_j: 1.0
 ```
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
 | `epsilon` | 0.01 | 最小采样保底项 |
 | `tau` | 1.0 | 共享池压力强度 |
-| `capacity_reference` | 5 | 默认参考容量 |
-| `mode` | continuous | 池模式 |
+| `base_capacity_Q0` | 5 | 默认参考容量 |
+| `rho_j` | 1.0 | 默认基础采样权重 |
 
 ---
 
@@ -331,10 +332,10 @@ adaptive_capacity:
 
 ```yaml
 shared_pool:
-  mode: continuous
+  mode: soft_pressure_continuous
   epsilon: 0.01
   tau: 1.0
-  capacity_reference: 5
+  base_capacity_Q0: 5
 
 region_novelty:
   enabled: false
@@ -342,7 +343,6 @@ region_novelty:
 
 adaptive_capacity:
   use_adaptive_Q: true
-  base_capacity_Q0: 5
   alpha_Q: 2.0
   Q_min: 1
   Q_max: 20

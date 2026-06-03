@@ -104,7 +104,7 @@ class SharedPool:
         """
         if self.mode == "soft_pressure":
             return self._sample_soft_pressure(preference, population, size, rng)
-        elif self.mode == "continuous":
+        elif self.mode in ("continuous", "soft_pressure_continuous"):
             return self._sample_continuous(preference, population, size, rng)
         elif self.mode == "hard_cap":
             return self._sample_hard_cap(preference, size, rng)

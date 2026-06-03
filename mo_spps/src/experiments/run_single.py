@@ -36,7 +36,7 @@ def _default_config() -> dict:
             "mode": "soft_pressure",
             "epsilon": 0.01,
             "tau": 1.0,
-            "capacity_reference": 5,
+            "base_capacity_Q0": 5,
         },
         "local_search": {
             "shop_size": 5,

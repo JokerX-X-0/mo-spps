@@ -16,7 +16,7 @@ shared_pool:
   epsilon: 0.01
   tau: 1.0
   utility_guidance_kappa: 0.5
-  capacity_reference: 12
+  base_capacity_Q0: 12
 
 local_search:
   shop_size: 5

@@ -42,7 +42,9 @@ class MOSPPSOptimizer:
         self.solution_capacity = problem.solution_capacity
         self.num_objectives = problem.num_objectives
 
-        capacity_ref = pool_cfg.get("capacity_reference", 5)
+        capacity_ref = pool_cfg.get(
+            "base_capacity_Q0", pool_cfg.get("capacity_reference", 5)
+        )
         self.components: list[Component] = []
         for j in range(self.num_components):
             self.components.append(
@@ -204,7 +206,7 @@ class MOSPPSOptimizer:
                     f"total_demand={total_demand} "
                     f"({self.population_size} agents × K={self.solution_capacity}). "
                     f"Capacity will exhaust during initialization. "
-                    f"Consider capacity_reference >= {min_cap}."
+                    f"Consider base_capacity_Q0 >= {min_cap}."
                 )
 
         dir_assignments = refdir.assign_directions(
