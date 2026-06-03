@@ -1,15 +1,21 @@
 """Phase 4 ablation experiments: validate all Phase 4 features.
 
 Compares:
-  1. Phase4_Full (all Phase 4 features on, continuous pool)
-  2. Phase3_Baseline (all Phase 4 features off)
-  3. NoPool (continuous pool disabled, mode=none)
-  4. NoUtilityGuidance (kappa=0)
-  5. NoNoveltyAcceptance
-  6. NoProbAcceptance
-  7. NoReleaseOp
-  8. CrowdingOnlyPrune
-  9. HardCapPool
+  1. MO_SPPS_Full (all Phase 4 features on, continuous pool)
+  2. MO_SPPS_NoPool (continuous pool disabled, mode=none)
+  3. MO_SPPS_OldSoftPool (original truncated soft-pressure formula)
+  4. MO_SPPS_ContinuousPool (continuous soft-pressure, fixed Q)
+  5. MO_SPPS_FixedQ (fixed shared-pool capacity)
+  6. MO_SPPS_AdaptiveQ (archive-driven adaptive capacity)
+  7. MO_SPPS_NoUtilityGuidance (kappa=0)
+  8. MO_SPPS_NoNoveltyAcceptance
+  9. MO_SPPS_NoProbAcceptance
+ 10. MO_SPPS_NoReleaseOp
+ 11. MO_SPPS_CrowdingOnlyPrune
+ 12. MO_SPPS_HardCapPool
+ 13. MO_SPPS_NoBudget (fixed budget, no dynamic allocation)
+ 14. MO_SPPS_NoInherit (no strategy preference inheritance)
+ 15. MO_SPPS_NoDecisionDiversity (delta=0 in budget)
 
 Section 33.4.
 """
@@ -28,7 +34,7 @@ from ..metrics import (
 )
 
 VARIANTS = {
-    "Phase4_Full": {
+    "MO_SPPS_Full": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -39,18 +45,7 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
-    "Phase3_Baseline": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.0,
-        "kappa": 0.0,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": False,
-        "use_novelty_acceptance": False,
-        "use_release_operation": False,
-        "prune_method": "crowding",
-    },
-    "NoPool": {
+    "MO_SPPS_NoPool": {
         "pool_mode": "none",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -61,7 +56,7 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
-    "NoUtilityGuidance": {
+    "MO_SPPS_NoUtilityGuidance": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -72,7 +67,7 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
-    "NoNoveltyAcceptance": {
+    "MO_SPPS_NoNoveltyAcceptance": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -83,7 +78,7 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
-    "NoProbAcceptance": {
+    "MO_SPPS_NoProbAcceptance": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -94,7 +89,7 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
-    "NoReleaseOp": {
+    "MO_SPPS_NoReleaseOp": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -105,7 +100,7 @@ VARIANTS = {
         "use_release_operation": False,
         "prune_method": "hybrid_objective_decision",
     },
-    "CrowdingOnlyPrune": {
+    "MO_SPPS_CrowdingOnlyPrune": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -116,7 +111,7 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "crowding",
     },
-    "HardCapPool": {
+    "MO_SPPS_HardCapPool": {
         "pool_mode": "hard_cap",
         "budget_mode": "dynamic",
         "gamma": 0.5,
@@ -127,10 +122,97 @@ VARIANTS = {
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
     },
+    "MO_SPPS_OldSoftPool": {
+        "pool_mode": "soft_pressure",
+        "budget_mode": "dynamic",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "use_strategy_inheritance": True,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+    },
+    "MO_SPPS_ContinuousPool": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "use_strategy_inheritance": True,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+        "use_adaptive_Q": False,
+    },
+    "MO_SPPS_FixedQ": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "use_strategy_inheritance": True,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+        "use_adaptive_Q": False,
+    },
+    "MO_SPPS_AdaptiveQ": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "use_strategy_inheritance": True,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+        "use_adaptive_Q": True,
+    },
+    "MO_SPPS_NoBudget": {
+        "pool_mode": "continuous",
+        "budget_mode": "fixed",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "use_strategy_inheritance": True,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+    },
+    "MO_SPPS_NoInherit": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "use_strategy_inheritance": False,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+    },
+    "MO_SPPS_NoDecisionDiversity": {
+        "pool_mode": "continuous",
+        "budget_mode": "dynamic",
+        "gamma": 0.5,
+        "kappa": 0.5,
+        "delta_decision_diversity": 0.0,
+        "use_strategy_inheritance": True,
+        "use_probabilistic_acceptance": True,
+        "use_novelty_acceptance": True,
+        "use_release_operation": True,
+        "prune_method": "hybrid_objective_decision",
+    },
 }
 
 
 def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, seed):
+    use_adaptive_q = variant.get("use_adaptive_Q", False)
+    delta_decision = variant.get("delta_decision_diversity", 0.4)
+    elim_interval = variant.get("elimination_interval", 3)
+    base_budget = variant.get("base_budget", 2.0)
+    capacity_q0 = variant.get("base_capacity_Q0", 5)
+
     return {
         "problem": {
             "num_components": num_components,
@@ -146,7 +228,7 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
             "epsilon": 0.01,
             "tau": 1.0,
             "utility_guidance_kappa": variant["kappa"],
-            "capacity_reference": 5,
+            "base_capacity_Q0": capacity_q0,
         },
         "local_search": {
             "shop_size": 5,
@@ -160,16 +242,16 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
         },
         "budget": {
             "mode": variant["budget_mode"],
-            "base_budget": 2.0,
+            "base_budget": base_budget,
             "alpha_pareto": 1.0,
             "beta_crowding": 1.0,
-            "delta_decision_diversity": 0.4,
+            "delta_decision_diversity": delta_decision,
             "gamma_exploration": variant["gamma"],
         },
         "rebirth": {
             "use_rebirth": True,
             "use_strategy_inheritance": variant["use_strategy_inheritance"],
-            "elimination_interval": 3,
+            "elimination_interval": elim_interval,
             "replacement_rate": 0.2,
             "inheritance_strength": 0.5,
             "inheritance_smoothing": 0.1,
@@ -188,6 +270,18 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
         },
         "reference_directions": {
             "n_directions": 50,
+        },
+        "adaptive_capacity": {
+            "use_adaptive_Q": use_adaptive_q,
+            "alpha_Q": 2.0,
+            "base_capacity_Q0": capacity_q0,
+            "Q_min": 3,
+            "Q_max": 30,
+            "update_interval": 10,
+        },
+        "region_novelty": {
+            "enabled": False,
+            "region_threshold": 0.3,
         },
         "experiment": {"seed": seed},
     }
@@ -289,13 +383,6 @@ def run_phase4_ablation(
 
     print("-" * 90)
 
-    p4 = aggregated["Phase4_Full"]
-    p3 = aggregated["Phase3_Baseline"]
-    print(f"\n  Phase 4 vs Phase 3 baseline:")
-    print(f"    HV change:       {p4['hypervolume'] - p3['hypervolume']:+.3f}")
-    print(f"    Jaccard change:  {p4['avg_jaccard_distance'] - p3['avg_jaccard_distance']:+.4f}")
-    print(f"    Entropy change:  {p4['component_entropy_norm'] - p3['component_entropy_norm']:+.4f}")
-    print(f"    Gini change:     {p4['reuse_concentration'] - p3['reuse_concentration']:+.4f}")
     print(f"{'='*90}\n")
 
     return {"all_results": all_results, "aggregated": aggregated}
