@@ -1,7 +1,8 @@
 """Comparison experiment: MO-SPPS vs NSGA-II vs MOEA/D vs MOGWO vs Random vs Greedy.
 
-Runs all algorithms on the same MOSCSP problem instance with equal FE budget
-and reports metrics side-by-side. Section 27.4, Section 30.
+Runs all algorithms on the same problem instance with equal FE budget
+and reports metrics side-by-side. Supports both MOSCSP and MOKP.
+Section 27.4, Section 30.
 """
 
 import json
@@ -9,6 +10,7 @@ import time
 import numpy as np
 
 from ..problems.mo_scsp import generate_moscp_instance
+from ..problems.mo_kp import generate_mokp_instance
 from ..baselines import (
     run_random_mo_search,
     run_greedy_scalarization,
@@ -225,6 +227,7 @@ def _print_comparison_table(
 
 
 def run_comparison(
+    problem_name: str = "moscp",
     problem_type: str = "high_synergy",
     num_components: int = 30,
     solution_capacity: int = 10,
@@ -233,35 +236,57 @@ def run_comparison(
     seed: int = 0,
     save_plot: bool = True,
     verbose: bool = True,
+    capacity_ratio: float = 0.5,
+    base_capacity_Q0: int | None = None,
 ) -> dict:
     """Run all algorithms on the same problem instance and compare.
 
     Args:
+        problem_name: "moscp" or "mokp".
         problem_type: MOSCSP instance type (low_synergy, high_synergy, multi_cluster).
-        num_components: Number of components (M).
-        solution_capacity: Max components per solution (K).
+            Ignored for MOKP.
+        num_components: Number of components / items.
+        solution_capacity: Max components per solution (MOSCSP only).
         max_fe: Maximum function evaluations.
         population_size: Population size for population-based algorithms.
         seed: Random seed.
         save_plot: Whether to save the comparison plot.
         verbose: Whether to print progress.
+        capacity_ratio: MOKP capacity ratio W / Σw_i (MOKP only).
+        base_capacity_Q0: Shared pool base capacity. Auto-computed if None.
 
     Returns:
         dict mapping algorithm name -> result dict.
     """
+    if problem_name == "mokp":
+        problem = generate_mokp_instance(
+            num_items=num_components,
+            capacity_ratio=capacity_ratio,
+            num_objectives=2,
+            seed=seed,
+        )
+        problem_label = f"MOKP (n={num_components}, W/Σw={capacity_ratio})"
+        effective_solution_capacity = num_components
+        if base_capacity_Q0 is None:
+            base_capacity_Q0 = max(12, num_components // 4)
+    else:
+        problem = generate_moscp_instance(
+            num_components=num_components,
+            solution_capacity=solution_capacity,
+            instance_type=problem_type,
+            synergy_strength=1.0,
+            seed=seed,
+        )
+        problem_label = f"MOSCSP ({problem_type}), M={num_components}, K={solution_capacity}"
+        effective_solution_capacity = solution_capacity
+        if base_capacity_Q0 is None:
+            base_capacity_Q0 = 12
+
     print(f"\n{'#'*90}")
     print(f"#  Algorithm Comparison: MO-SPPS vs NSGA-II vs MOEA/D vs MOGWO")
-    print(f"#  Problem: MOSCSP ({problem_type}), M={num_components}, K={solution_capacity}")
+    print(f"#  Problem: {problem_label}")
     print(f"#  Budget: {max_fe} FE, Seed: {seed}")
     print(f"{'#'*90}")
-
-    problem = generate_moscp_instance(
-        num_components=num_components,
-        solution_capacity=solution_capacity,
-        instance_type=problem_type,
-        synergy_strength=1.0,
-        seed=seed,
-    )
 
     results: dict[str, dict] = {}
     summaries: dict[str, dict] = {}
@@ -275,7 +300,7 @@ def run_comparison(
     config = {
         "problem": {
             "num_components": num_components,
-            "solution_capacity": solution_capacity,
+            "solution_capacity": effective_solution_capacity,
             "num_objectives": 2,
         },
         "population": {
@@ -283,10 +308,10 @@ def run_comparison(
             "max_function_evaluations": max_fe,
         },
         "shared_pool": {
-            "mode": "soft_pressure",
+            "mode": "continuous",
             "epsilon": 0.01,
             "tau": 1.0,
-            "capacity_reference": 5,
+            "base_capacity_Q0": base_capacity_Q0,
         },
         "local_search": {
             "shop_size": 5,
@@ -350,7 +375,7 @@ def run_comparison(
     result_nsga2 = run_nsga2(
         problem=problem,
         max_fe=max_fe,
-        solution_capacity=solution_capacity,
+        solution_capacity=effective_solution_capacity,
         archive_size=200,
         population_size=population_size,
         crossover_rate=0.9,
@@ -375,7 +400,7 @@ def run_comparison(
     result_moead = run_moead(
         problem=problem,
         max_fe=max_fe,
-        solution_capacity=solution_capacity,
+        solution_capacity=effective_solution_capacity,
         archive_size=200,
         population_size=population_size,
         neighborhood_size=20,
@@ -400,7 +425,7 @@ def run_comparison(
     result_mogwo = run_mogwo(
         problem=problem,
         max_fe=max_fe,
-        solution_capacity=solution_capacity,
+        solution_capacity=effective_solution_capacity,
         archive_size=200,
         population_size=population_size,
         seed=seed,
@@ -423,7 +448,7 @@ def run_comparison(
     result_random = run_random_mo_search(
         problem=problem,
         max_fe=max_fe,
-        solution_capacity=solution_capacity,
+        solution_capacity=effective_solution_capacity,
         archive_size=200,
         seed=seed,
     )
@@ -445,7 +470,7 @@ def run_comparison(
     result_greedy = run_greedy_scalarization(
         problem=problem,
         max_fe=max_fe,
-        solution_capacity=solution_capacity,
+        solution_capacity=effective_solution_capacity,
         archive_size=200,
         n_directions=50,
         seed=seed,
@@ -461,21 +486,23 @@ def run_comparison(
     # =========================================================================
     # Print comparison
     # =========================================================================
-    _print_comparison_table(f"MOSCSP ({problem_type})", summaries)
+    _print_comparison_table(problem_label, summaries)
 
     # Plot
     if save_plot:
-        plot_title = f"Pareto Front Comparison — MOSCSP ({problem_type}, {max_fe} FE)"
-        save_path = f"comparison_pareto_{problem_type}_fe{max_fe}.png"
+        safe_label = problem_label.replace(" ", "_").replace("(", "").replace(")", "").replace(",", "").replace("/", "-")
+        plot_title = f"Pareto Front Comparison — {problem_label} ({max_fe} FE)"
+        save_path = f"comparison_pareto_{safe_label}_fe{max_fe}.png"
         _compare_pareto_fronts(results, plot_title, save_path)
 
     return {
         "results": results,
         "summaries": summaries,
-        "problem_type": problem_type,
+        "problem_name": problem_name,
+        "problem_label": problem_label,
         "config": {
             "num_components": num_components,
-            "solution_capacity": solution_capacity,
+            "solution_capacity": effective_solution_capacity,
             "max_fe": max_fe,
             "population_size": population_size,
             "seed": seed,
@@ -496,6 +523,7 @@ def run_all_problem_types(
     all_results = {}
     for ptype in ["low_synergy", "high_synergy", "multi_cluster"]:
         all_results[ptype] = run_comparison(
+            problem_name="moscp",
             problem_type=ptype,
             num_components=num_components,
             solution_capacity=solution_capacity,
@@ -531,19 +559,80 @@ def run_all_problem_types(
     return all_results
 
 
+def run_mokp_variants(
+    num_items: int = 100,
+    max_fe: int = 10000,
+    population_size: int = 100,
+    seed: int = 0,
+    save_plot: bool = True,
+    verbose: bool = True,
+) -> dict:
+    """Run comparison on MOKP with multiple capacity ratios.
+
+    Capacity ratios test different constraint tightness levels:
+      0.3 = tight (few feasible items), 0.5 = medium, 0.7 = loose.
+    """
+    all_results = {}
+    for cr in [0.3, 0.5, 0.7]:
+        label = f"cr{int(cr*100)}"
+        all_results[label] = run_comparison(
+            problem_name="mokp",
+            num_components=num_items,
+            max_fe=max_fe,
+            population_size=population_size,
+            seed=seed,
+            save_plot=save_plot,
+            verbose=verbose,
+            capacity_ratio=cr,
+        )
+
+    # Cross-variant summary
+    print("\n" + "=" * 90)
+    print("  MOKP Cross-Capacity Summary: HV (higher = better)")
+    print("=" * 90)
+    header = f"{'Algorithm':<12}"
+    for cr_label in ["cr30", "cr50", "cr70"]:
+        header += f" {cr_label:>22}"
+    print(header)
+    print("-" * 90)
+
+    algo_order = ["MO-SPPS", "NSGA-II", "MOEA/D", "MOGWO", "Random", "Greedy"]
+    for name in algo_order:
+        row = f"{name:<12}"
+        for cr_label in ["cr30", "cr50", "cr70"]:
+            s = all_results[cr_label]["summaries"].get(name, {})
+            hv = s.get("hypervolume", 0)
+            jd = s.get("avg_jaccard_distance", 0)
+            row += f" HV={hv:.2f} JD={jd:.4f}"
+        print(row)
+
+    print("=" * 90)
+
+    return all_results
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Run MO algorithm comparison on MOSCSP"
+        description="Run MO algorithm comparison on MOSCSP or MOKP"
+    )
+    parser.add_argument(
+        "--problem_name", type=str, default="moscp",
+        choices=["moscp", "mokp"],
+        help="Problem class"
     )
     parser.add_argument(
         "--problem", type=str, default="high_synergy",
         choices=["low_synergy", "high_synergy", "multi_cluster", "all"],
-        help="MOSCSP instance type"
+        help="MOSCSP instance type, or 'all' for MOKP capacity ratios"
     )
-    parser.add_argument("--num_components", type=int, default=30)
-    parser.add_argument("--solution_capacity", type=int, default=10)
+    parser.add_argument("--num_components", type=int, default=30,
+                        help="Number of components / items")
+    parser.add_argument("--solution_capacity", type=int, default=10,
+                        help="Max components per solution (MOSCSP only)")
+    parser.add_argument("--capacity_ratio", type=float, default=0.5,
+                        help="MOKP capacity ratio W/Σw")
     parser.add_argument("--max_fe", type=int, default=10000)
     parser.add_argument("--population_size", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
@@ -552,24 +641,47 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.problem == "all":
-        run_all_problem_types(
-            num_components=args.num_components,
-            solution_capacity=args.solution_capacity,
-            max_fe=args.max_fe,
-            population_size=args.population_size,
-            seed=args.seed,
-            save_plot=not args.no_plot,
-            verbose=not args.quiet,
-        )
+    if args.problem_name == "mokp":
+        if args.problem == "all":
+            run_mokp_variants(
+                num_items=args.num_components,
+                max_fe=args.max_fe,
+                population_size=args.population_size,
+                seed=args.seed,
+                save_plot=not args.no_plot,
+                verbose=not args.quiet,
+            )
+        else:
+            run_comparison(
+                problem_name="mokp",
+                num_components=args.num_components,
+                max_fe=args.max_fe,
+                population_size=args.population_size,
+                seed=args.seed,
+                save_plot=not args.no_plot,
+                verbose=not args.quiet,
+                capacity_ratio=args.capacity_ratio,
+            )
     else:
-        run_comparison(
-            problem_type=args.problem,
-            num_components=args.num_components,
-            solution_capacity=args.solution_capacity,
-            max_fe=args.max_fe,
-            population_size=args.population_size,
-            seed=args.seed,
-            save_plot=not args.no_plot,
-            verbose=not args.quiet,
-        )
+        if args.problem == "all":
+            run_all_problem_types(
+                num_components=args.num_components,
+                solution_capacity=args.solution_capacity,
+                max_fe=args.max_fe,
+                population_size=args.population_size,
+                seed=args.seed,
+                save_plot=not args.no_plot,
+                verbose=not args.quiet,
+            )
+        else:
+            run_comparison(
+                problem_name="moscp",
+                problem_type=args.problem,
+                num_components=args.num_components,
+                solution_capacity=args.solution_capacity,
+                max_fe=args.max_fe,
+                population_size=args.population_size,
+                seed=args.seed,
+                save_plot=not args.no_plot,
+                verbose=not args.quiet,
+            )

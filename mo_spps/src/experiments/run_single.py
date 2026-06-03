@@ -8,6 +8,8 @@ import time
 import numpy as np
 
 from ..mo_spps import MOSPPSOptimizer
+from ..problems import MOSCSP, MOKP, generate_mokp_instance
+from ..problems.mo_scsp import generate_moscp_instance
 
 
 def load_config(config_path: str) -> dict:
@@ -96,6 +98,46 @@ def _default_config() -> dict:
             "num_runs": 1,
         },
     }
+
+
+def create_problem(
+    problem_type: str = "moscp",
+    num_components: int = 30,
+    solution_capacity: int = 10,
+    num_objectives: int = 2,
+    seed: int = 0,
+    **kwargs,
+):
+    """Create a problem instance by name.
+
+    Args:
+        problem_type: "moscp" or "mokp".
+        num_components: Number of components / items.
+        solution_capacity: Max components per solution (MOSCSP only).
+        num_objectives: Number of objectives.
+        seed: Random seed.
+        **kwargs: Problem-specific options (e.g., instance_type for MOSCSP,
+                  capacity_ratio for MOKP).
+
+    Returns:
+        MultiObjectiveProblem instance.
+    """
+    if problem_type == "mokp":
+        capacity_ratio = kwargs.get("capacity_ratio", 0.5)
+        return generate_mokp_instance(
+            num_items=num_components,
+            capacity_ratio=capacity_ratio,
+            num_objectives=num_objectives,
+            seed=seed,
+        )
+    else:
+        instance_type = kwargs.get("instance_type", "high_synergy")
+        return generate_moscp_instance(
+            num_components=num_components,
+            solution_capacity=solution_capacity,
+            instance_type=instance_type,
+            seed=seed,
+        )
 
 
 def run_single_experiment(
@@ -192,3 +234,63 @@ def run_with_diagnostic_output(
 ) -> dict:
     """Run experiment with detailed per-iteration diagnostic output."""
     return run_single_experiment(problem, config, verbose=True)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Run a single MO-SPPS experiment"
+    )
+    parser.add_argument(
+        "--problem", type=str, default="moscp",
+        choices=["moscp", "mokp"],
+        help="Problem type"
+    )
+    parser.add_argument("--num_components", type=int, default=30,
+                        help="Number of components/items")
+    parser.add_argument("--solution_capacity", type=int, default=10,
+                        help="Max components per solution (MOSCSP only)")
+    parser.add_argument("--num_objectives", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--instance_type", type=str, default="high_synergy",
+        choices=["low_synergy", "high_synergy", "multi_cluster"],
+        help="MOSCSP instance type"
+    )
+    parser.add_argument("--capacity_ratio", type=float, default=0.5,
+                        help="MOKP capacity ratio")
+    parser.add_argument("--max_fe", type=int, default=5000)
+    parser.add_argument("--population_size", type=int, default=50)
+    parser.add_argument("--pool_mode", type=str, default="continuous")
+    parser.add_argument("--base_capacity_Q0", type=int, default=12)
+    parser.add_argument("--config", type=str, default=None,
+                        help="Path to YAML config file")
+    parser.add_argument("--quiet", action="store_true")
+
+    args = parser.parse_args()
+
+    if args.config:
+        config = load_config(args.config)
+    else:
+        config = _default_config()
+        config["problem"]["num_components"] = args.num_components
+        config["problem"]["solution_capacity"] = args.solution_capacity
+        config["problem"]["num_objectives"] = args.num_objectives
+        config["population"]["population_size"] = args.population_size
+        config["population"]["max_function_evaluations"] = args.max_fe
+        config["shared_pool"]["mode"] = args.pool_mode
+        config["shared_pool"]["base_capacity_Q0"] = args.base_capacity_Q0
+        config["experiment"]["seed"] = args.seed
+
+    problem = create_problem(
+        problem_type=args.problem,
+        num_components=args.num_components,
+        solution_capacity=args.solution_capacity,
+        num_objectives=args.num_objectives,
+        seed=args.seed,
+        instance_type=args.instance_type,
+        capacity_ratio=args.capacity_ratio,
+    )
+
+    run_single_experiment(problem, config, verbose=not args.quiet)
