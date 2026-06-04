@@ -118,8 +118,7 @@ win/tie/loss
 | MO_SPPS_Full | 完整算法 | 必跑 |
 | MO_SPPS_NoPool | 移除共享池压力（pool_mode=none） | 必跑 |
 | MO_SPPS_OldSoftPool | 原始截断软压力公式（pool_mode=soft_pressure） | 必跑 |
-| MO_SPPS_ContinuousPool | 连续型软压力公式（pool_mode=continuous） | 必跑 |
-| MO_SPPS_FixedQ | 固定共享池容量 \(Q_j\) | 必跑 |
+| MO_SPPS_ContinuousPool | 连续型软压力公式 + 固定 \(Q_j\)（pool_mode=continuous） | 必跑 |
 | MO_SPPS_AdaptiveQ | 自适应共享池容量 \(Q_j\) | 必跑 |
 | MO_SPPS_NoBudget | 移除动态预算，使用固定预算 | 必跑 |
 | MO_SPPS_NoInherit | 移除策略偏好继承 | 必跑 |
@@ -144,7 +143,6 @@ win/tie/loss
 | 版本 | 目的 |
 |---|---|
 | MO_SPPS_OldSoftPool | 对比截断压力与连续压力 |
-| MO_SPPS_FixedQ | 对比固定容量与自适应容量 |
 | MO_SPPS_NoBudget | 验证预算调度贡献 |
 | MO_SPPS_NoInherit | 验证策略继承贡献 |
 | MO_SPPS_NoDecisionDiversity | 验证决策空间多样性项贡献 |
@@ -415,7 +413,7 @@ moscsp:
 | 决策多样性对照 | NSGA-II + Decision Diversity | 必跑 |
 | 组合优化强对照 | Pareto Local Search | 必跑 |
 | 组合优化强对照 | MOEA/D + Local Search | 必跑 |
-| 本文算法 | MO_SPPS_Full, MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_FixedQ, MO_SPPS_AdaptiveQ, MO_SPPS_NoBudget, MO_SPPS_NoInherit, MO_SPPS_NoDecisionDiversity, MO_SPPS_HardCapPool | 必跑 |
+| 本文算法 | MO_SPPS_Full, MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_NoBudget, MO_SPPS_NoInherit, MO_SPPS_NoDecisionDiversity, MO_SPPS_HardCapPool | 必跑 |
 
 ### 6.5 重点指标
 
@@ -531,7 +529,6 @@ score_j=\frac{\sum_{k=1}^{m}\hat p_{kj}}{\sum_{r=1}^{R}\hat w_{rj}+\epsilon}
 | 本文算法 | MO_SPPS_NoPool | 必跑 |
 | 本文算法 | MO_SPPS_OldSoftPool | 必跑 |
 | 本文算法 | MO_SPPS_ContinuousPool | 必跑 |
-| 本文算法 | MO_SPPS_FixedQ | 必跑 |
 | 本文算法 | MO_SPPS_AdaptiveQ | 必跑 |
 | 本文算法 | MO_SPPS_Full | 必跑 |
 
@@ -630,12 +627,12 @@ maximum_coverage:
 | 组合优化强对照 | Greedy + Local Search | 必跑 |
 | 组合优化强对照 | MOEA/D + Local Search | 推荐 |
 | 决策多样性对照 | NSGA-II + Decision Diversity | 必跑 |
-| 本文算法 | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_FixedQ, MO_SPPS_AdaptiveQ, MO_SPPS_Full | 必跑 |
+| 本文算法 | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_Full | 必跑 |
 
 核心消融版本包括：
 
 ```text
-MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_FixedQ, MO_SPPS_AdaptiveQ, MO_SPPS_Full
+MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_Full
 ```
 
 ### 8.5 重点指标
@@ -952,9 +949,9 @@ QUBO / Max-Cut 是扩展验证问题，不要求 MO-SPPS 在所有实例上压�
 
 | 问题 | 对比算法 | MO-SPPS 版本 |
 |---|---|---|
-| MOSCSP | Random, Greedy, NSGA-II, SPEA2, MOEA/D, IBEA, PLS, MOEA/D-LS, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_FixedQ, MO_SPPS_AdaptiveQ, MO_SPPS_NoBudget, MO_SPPS_NoInherit, MO_SPPS_NoDecisionDiversity, MO_SPPS_HardCapPool, MO_SPPS_Full |
-| MOKP / MOMKP | NSGA-II, SPEA2, MOEA/D, IBEA, SMS-EMOA, MOGLS, PLS, 2PPLS, MOEA/D-LS, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_FixedQ, MO_SPPS_AdaptiveQ, MO_SPPS_NoBudget, MO_SPPS_NoInherit, MO_SPPS_NoDecisionDiversity, MO_SPPS_HardCapPool, MO_SPPS_Full |
-| Maximum Coverage | Random, Greedy, Pareto Greedy, NSGA-II, SPEA2, MOEA/D, IBEA, PLS, Greedy-LS, MOEA/D-LS, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_FixedQ, MO_SPPS_AdaptiveQ, MO_SPPS_Full |
+| MOSCSP | Random, Greedy, NSGA-II, SPEA2, MOEA/D, IBEA, PLS, MOEA/D-LS, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_NoBudget, MO_SPPS_NoInherit, MO_SPPS_NoDecisionDiversity, MO_SPPS_HardCapPool, MO_SPPS_Full |
+| MOKP / MOMKP | NSGA-II, SPEA2, MOEA/D, IBEA, SMS-EMOA, MOGLS, PLS, 2PPLS, MOEA/D-LS, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_NoBudget, MO_SPPS_NoInherit, MO_SPPS_NoDecisionDiversity, MO_SPPS_HardCapPool, MO_SPPS_Full |
+| Maximum Coverage | Random, Greedy, Pareto Greedy, NSGA-II, SPEA2, MOEA/D, IBEA, PLS, Greedy-LS, MOEA/D-LS, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_OldSoftPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_Full |
 | Feature Selection | Filter Top-K, Random Subset, Binary NSGA-II, Binary SPEA2, Binary MOEA/D, MOPSO-ASFS, MOEA/D-FS, NSGAIII-FS, CNSGA-II, Binary NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_Full |
 | QUBO / Max-Cut | NSGA-II, SPEA2, MOEA/D, IBEA, PLS, MOTS, Memetic NSGA-II, NSGA-II+Div | MO_SPPS_NoPool, MO_SPPS_ContinuousPool, MO_SPPS_AdaptiveQ, MO_SPPS_Full |
 

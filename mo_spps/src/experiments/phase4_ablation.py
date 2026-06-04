@@ -1,26 +1,26 @@
 """Phase 4 ablation experiments: validate all Phase 4 features.
 
 Compares:
-  1. MO_SPPS_Full (all Phase 4 features on, continuous pool)
+  1. MO_SPPS_Full (all Phase 4 features on, continuous pool, adaptive Q)
   2. MO_SPPS_NoPool (continuous pool disabled, mode=none)
   3. MO_SPPS_OldSoftPool (original truncated soft-pressure formula)
   4. MO_SPPS_ContinuousPool (continuous soft-pressure, fixed Q)
-  5. MO_SPPS_FixedQ (fixed shared-pool capacity)
-  6. MO_SPPS_AdaptiveQ (archive-driven adaptive capacity)
-  7. MO_SPPS_NoUtilityGuidance (kappa=0)
-  8. MO_SPPS_NoNoveltyAcceptance
-  9. MO_SPPS_NoProbAcceptance
- 10. MO_SPPS_NoReleaseOp
- 11. MO_SPPS_CrowdingOnlyPrune
- 12. MO_SPPS_HardCapPool
- 13. MO_SPPS_NoBudget (fixed budget, no dynamic allocation)
- 14. MO_SPPS_NoInherit (no strategy preference inheritance)
- 15. MO_SPPS_NoDecisionDiversity (delta=0 in budget)
+  5. MO_SPPS_AdaptiveQ (archive-driven adaptive capacity)
+  6. MO_SPPS_NoUtilityGuidance (kappa=0)
+  7. MO_SPPS_NoNoveltyAcceptance
+  8. MO_SPPS_NoProbAcceptance
+  9. MO_SPPS_NoReleaseOp
+ 10. MO_SPPS_CrowdingOnlyPrune
+ 11. MO_SPPS_HardCapPool
+ 12. MO_SPPS_NoBudget (fixed budget, no dynamic allocation)
+ 13. MO_SPPS_NoInherit (no strategy preference inheritance)
+ 14. MO_SPPS_NoDecisionDiversity (delta=0 in budget)
 
 Section 33.4.
 """
 
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 
 from ..problems.mo_scsp import generate_moscp_instance
@@ -44,6 +44,7 @@ VARIANTS = {
         "use_novelty_acceptance": True,
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
+        "use_adaptive_Q": True,
     },
     "MO_SPPS_NoPool": {
         "pool_mode": "none",
@@ -145,18 +146,6 @@ VARIANTS = {
         "prune_method": "hybrid_objective_decision",
         "use_adaptive_Q": False,
     },
-    "MO_SPPS_FixedQ": {
-        "pool_mode": "continuous",
-        "budget_mode": "dynamic",
-        "gamma": 0.5,
-        "kappa": 0.5,
-        "use_strategy_inheritance": True,
-        "use_probabilistic_acceptance": True,
-        "use_novelty_acceptance": True,
-        "use_release_operation": True,
-        "prune_method": "hybrid_objective_decision",
-        "use_adaptive_Q": False,
-    },
     "MO_SPPS_AdaptiveQ": {
         "pool_mode": "continuous",
         "budget_mode": "dynamic",
@@ -211,7 +200,7 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
     delta_decision = variant.get("delta_decision_diversity", 0.4)
     elim_interval = variant.get("elimination_interval", 3)
     base_budget = variant.get("base_budget", 2.0)
-    capacity_q0 = variant.get("base_capacity_Q0", 5)
+    capacity_q0 = variant.get("base_capacity_Q0", 3)
 
     return {
         "problem": {
@@ -287,6 +276,25 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
     }
 
 
+def _run_one_variant(args):
+    """Run a single variant × run combination. Top-level for multiprocessing."""
+    vname, variant, run_seed, num_components, solution_capacity, max_fe, pop_size, problem_type = args
+
+    problem = generate_moscp_instance(num_components, solution_capacity,
+                                       problem_type, 1.0, run_seed)
+    config = _make_config(variant, num_components, solution_capacity,
+                           max_fe, pop_size, run_seed)
+    np.random.seed(run_seed)
+    start = time.perf_counter()
+    opt = MOSPPSOptimizer(problem, config)
+    opt.initialize()
+    opt.run()
+    elapsed = time.perf_counter() - start
+
+    s = _extract_summary(opt.archive, problem, opt.fe_count, opt.agents, elapsed, opt.ref_point)
+    return vname, run_seed, s
+
+
 def _extract_summary(archive, problem, fe_count, agents, elapsed, ref_point=None):
     arch_objs = archive.get_objectives_array()
     hv = 0.0
@@ -316,6 +324,8 @@ def run_phase4_ablation(
     seed=0,
     n_runs=30,
     verbose=True,
+    skip_variants=None,
+    workers=1,
 ):
     print(f"\n{'#'*90}")
     print(f"#  Phase 4 Ablation: All Features Validation")
@@ -324,15 +334,29 @@ def run_phase4_ablation(
     print(f"{'#'*90}")
 
     all_results = {name: [] for name in VARIANTS}
-    total = len(VARIANTS) * n_runs
-    count = 0
+    skip = set(skip_variants or [])
+    active_variants = [(n, v) for n, v in VARIANTS.items() if n not in skip]
+    total = len(active_variants) * n_runs
 
-    for vname, variant in VARIANTS.items():
+    if workers > 1:
+        print(f"#  Parallel workers: {workers}")
+    print(f"{'#'*90}")
+
+    # Build list of all jobs
+    jobs = []
+    for vname, variant in active_variants:
         for run in range(n_runs):
-            count += 1
             run_seed = seed + run
+            jobs.append((vname, variant, run_seed, num_components, solution_capacity,
+                         max_fe, population_size, problem_type))
+
+    count = 0
+    if workers <= 1:
+        # Sequential execution
+        for vname, variant, run_seed, _, _, _, _, _ in jobs:
+            count += 1
             if verbose:
-                print(f"  [{count}/{total}] {vname} run {run+1}/{n_runs}...", end=" ")
+                print(f"  [{count}/{total}] {vname} run {run_seed - seed + 1}/{n_runs}...", end=" ")
 
             problem = generate_moscp_instance(num_components, solution_capacity,
                                                problem_type, 1.0, run_seed)
@@ -350,6 +374,16 @@ def run_phase4_ablation(
 
             if verbose:
                 print(f"|A|={s['archive_size']}, HV={s['hypervolume']:.2f}, JD={s['avg_jaccard_distance']:.4f}")
+    else:
+        # Parallel execution
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(_run_one_variant, j): j for j in jobs}
+            for future in as_completed(futures):
+                count += 1
+                vname, run_seed, s = future.result()
+                all_results[vname].append(s)
+                if verbose:
+                    print(f"  [{count}/{total}] {vname} run {run_seed - seed + 1}/{n_runs}... |A|={s['archive_size']}, HV={s['hypervolume']:.2f}, JD={s['avg_jaccard_distance']:.4f}")
 
     # Aggregate
     metrics_keys = ["archive_size", "hypervolume", "avg_jaccard_distance",
@@ -363,7 +397,7 @@ def run_phase4_ablation(
     print(header)
     print("-" * 90)
 
-    for vname in VARIANTS:
+    for vname, _ in active_variants:
         runs = all_results[vname]
         agg = {}
         for k in metrics_keys:
@@ -400,7 +434,13 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--n_runs", type=int, default=30)
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--skip_hardcap", action="store_true",
+                        help="Skip MO_SPPS_HardCapPool (slow)")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Number of parallel workers (default: 1)")
     args = parser.parse_args()
+    skip = ["MO_SPPS_HardCapPool"] if args.skip_hardcap else None
     run_phase4_ablation(args.problem, args.num_components, args.solution_capacity,
                          args.max_fe, args.population_size, args.seed, args.n_runs,
-                         verbose=not args.quiet)
+                         verbose=not args.quiet, skip_variants=skip,
+                         workers=args.workers)

@@ -9,8 +9,14 @@ def dominates(a: np.ndarray, b: np.ndarray) -> bool:
 
     Section 4.1.
     """
-    if a.shape != b.shape:
+    # Fast path for 2-objective case (most common, avoids numpy overhead)
+    m = a.shape[0]
+    if m != b.shape[0]:
         raise ValueError(f"Shape mismatch: {a.shape} vs {b.shape}")
+    if m == 2:
+        a0, a1 = a[0], a[1]
+        b0, b1 = b[0], b[1]
+        return a0 >= b0 and a1 >= b1 and (a0 > b0 or a1 > b1)
     at_least_as_good = bool(np.all(a >= b))
     strictly_better = bool(np.any(a > b))
     return at_least_as_good and strictly_better
