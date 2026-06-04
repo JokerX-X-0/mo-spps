@@ -44,7 +44,7 @@ VARIANTS = {
         "use_novelty_acceptance": True,
         "use_release_operation": True,
         "prune_method": "hybrid_objective_decision",
-        "use_adaptive_Q": True,
+        "use_adaptive_Q": False,
     },
     "MO_SPPS_NoPool": {
         "pool_mode": "none",
@@ -266,7 +266,7 @@ def _make_config(variant, num_components, solution_capacity, max_fe, pop_size, s
             "base_capacity_Q0": capacity_q0,
             "Q_min": 3,
             "Q_max": 30,
-            "update_interval": 10,
+            "update_interval": 2,
         },
         "region_novelty": {
             "enabled": False,

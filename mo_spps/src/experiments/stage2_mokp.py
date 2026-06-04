@@ -29,7 +29,7 @@ MO_SPPS_VARIANTS = {
         "gamma": 0.5, "kappa": 0.5,
         "use_strategy_inheritance": True, "use_probabilistic_acceptance": True,
         "use_novelty_acceptance": True, "use_release_operation": True,
-        "prune_method": "hybrid_objective_decision", "use_adaptive_Q": True,
+        "prune_method": "hybrid_objective_decision", "use_adaptive_Q": False,
     },
     "MO_SPPS_NoPool": {
         "pool_mode": "none", "budget_mode": "dynamic",
@@ -119,7 +119,7 @@ def _make_config(variant, num_components, max_fe, pop_size, seed, capacity_q0=12
         "adaptive_capacity": {
             "use_adaptive_Q": use_adaptive_q,
             "alpha_Q": 2.0, "base_capacity_Q0": capacity_q0,
-            "Q_min": 3, "Q_max": 30, "update_interval": 10,
+            "Q_min": 3, "Q_max": 30, "update_interval": 2,
         },
         "region_novelty": {"enabled": False, "region_threshold": 0.3},
         "experiment": {"seed": seed},

@@ -91,7 +91,7 @@ def _default_config() -> dict:
             "base_capacity_Q0": 12,
             "Q_min": 3,
             "Q_max": 30,
-            "update_interval": 10,
+            "update_interval": 2,
         },
         "experiment": {
             "seed": 0,

@@ -168,7 +168,7 @@ class MOSPPSOptimizer:
         self.Q0 = ac_cfg.get("base_capacity_Q0", 5)
         self.Q_min = ac_cfg.get("Q_min", 1)
         self.Q_max = ac_cfg.get("Q_max", 20)
-        self.capacity_update_interval = ac_cfg.get("update_interval", 10)
+        self.capacity_update_interval = ac_cfg.get("update_interval", 2)
         self.contribution_metric = ac_cfg.get(
             "contribution_metric", "archive_frequency_weighted_crowding"
         )
@@ -893,9 +893,11 @@ class MOSPPSOptimizer:
                     contrib[j] += weight
             total_weight += weight
 
-        total_weight_eps = total_weight + self.pool.epsilon
-        for j in contrib:
-            contrib[j] /= total_weight_eps
+        # Normalize by max contribution so C_j ∈ [0, 1] (not 1/M)
+        max_weight = max(contrib.values()) if contrib else 1.0
+        if max_weight > 0:
+            for j in contrib:
+                contrib[j] /= max_weight
 
         return contrib
 
